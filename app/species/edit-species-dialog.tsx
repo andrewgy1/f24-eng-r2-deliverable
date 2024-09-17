@@ -1,5 +1,15 @@
 "use client";
-
+/*
+Note: "use client" is a Next.js App Router directive that tells React to render the component as
+a client component rather than a server component. This establishes the server-client boundary,
+providing access to client-side functionality such as hooks and event handlers to this component and
+any of its imported children. Although the SpeciesCard component itself does not use any client-side
+functionality, it is beneficial to move it to the client because it is rendered in a list with a unique
+key prop in species/page.tsx. When multiple component instances are rendered from a list, React uses the unique key prop
+on the client-side to correctly match component state and props should the order of the list ever change.
+React server components don't track state between rerenders, so leaving the uniquely identified components (e.g. SpeciesCard)
+can cause errors with matching props and state in child components if the list order changes.
+*/
 import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,20 +21,26 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { createBrowserSupabaseClient } from "@/lib/client-utils";
+import type { Database } from "@/lib/schema";
+import {UUID } from "crypto";
+import Image from "next/image";
+import { useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
-import { createBrowserSupabaseClient } from "@/lib/client-utils";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useState, type BaseSyntheticEvent } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+type Species = Database["public"]["Tables"]["species"]["Row"];
+
 // We use zod (z) to define a schema for the "Add species" form.
 // zod handles validation of the input values with methods like .string(), .nullable(). It also processes the form inputs with .transform() before the inputs are sent to the database.
+
 // Define kingdom enum for use in Zod schema and displaying dropdown options in the form
 const kingdoms = z.enum(["Animalia", "Plantae", "Fungi", "Protista", "Archaea", "Bacteria"]);
 
@@ -73,34 +89,29 @@ const defaultValues: Partial<FormData> = {
   description: null,
 };
 
-export default function AddSpeciesDialog({ userId }: { userId: string }) {
+export default function EditSpeciesDialog ({ species, currentId }: { species: Species, currentId: string }){
   const router = useRouter();
-
-  // Control open/closed state of the dialog
   const [open, setOpen] = useState<boolean>(false);
-
   // Instantiate form functionality with React Hook Form, passing in the Zod schema (for validation) and default values
   const form = useForm<FormData>({
     resolver: zodResolver(speciesSchema),
-    defaultValues,
+    defaultValues:{
+      scientific_name: species.scientific_name,
+      common_name: species.common_name,
+      kingdom: species.kingdom,
+      total_population: species.total_population,
+      image: species.image,
+      description: species.description
+    },
     mode: "onChange",
   });
 
-  //Update database entries when form is submitted
+  // Adds new edited species information to database when form is submitted
   const onSubmit = async (input: FormData) => {
     // The `input` prop contains data that has already been processed by zod. We can now use it in a supabase query
     const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.from("species").insert([
-      {
-        author: userId,
-        common_name: input.common_name,
-        description: input.description,
-        kingdom: input.kingdom,
-        scientific_name: input.scientific_name,
-        total_population: input.total_population,
-        image: input.image,
-      },
-    ]);
+    const {data, error } = await supabase.from("species").update(input)
+      .eq("id", species.id);
 
     // Catch and report errors from Supabase and exit the onSubmit function with an early 'return' if an error occurred.
     if (error) {
@@ -111,36 +122,56 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
       });
     }
 
+    setOpen(false);
     // Because Supabase errors were caught above, the remainder of the function will only execute upon a successful edit
+
     // Reset form values to the default (empty) values.
     // Practically, this line can be removed because router.refresh() also resets the form. However, we left it as a reminder that you should generally consider form "cleanup" after an add/edit operation.
-    form.reset(defaultValues);
-
-    setOpen(false);
+    // form.reset(defaultValues);
 
     // Refresh all server components in the current route. This helps display the newly created species because species are fetched in a server component, species/page.tsx.
     // Refreshing that server component will display the new species from Supabase
     router.refresh();
 
     return toast({
-      title: "New species added!",
-      description: "Successfully added " + input.scientific_name + ".",
+      title: "Species Edited!",
+      description: "Successfully edited " + input.scientific_name + ".",
     });
   };
+
+  // Resets form when closed without saving edits
+  const handleDialogClose = () => {
+    form.reset();
+    setOpen(false);
+  };
+
+  //Deletes post when delete button is clicked
+  const deleteSpecies = async ()=>{
+    const supabase = createBrowserSupabaseClient();
+    const {data, error } = await supabase.from("species").delete().match({"id": species.id});
+
+    setOpen(false);
+    router.refresh();
+
+    return toast({
+      title: "Species Deleted!",
+      description: "Successfully deleted " + species.scientific_name + "."
+    });
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="secondary">
           <Icons.add className="mr-3 h-5 w-5" />
-          Add Species
+          Edit Species
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-screen overflow-y-auto sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>Add Species</DialogTitle>
+          <DialogTitle>Edit Species</DialogTitle>
           <DialogDescription>
-            Add a new species here. Click &quot;Add Species&quot; below when you&apos;re done.
+            Edit the species entry here. Click &quot;Finish Editing&quot; below when you&apos;re done.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -169,7 +200,7 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
                     <FormItem>
                       <FormLabel>Common Name</FormLabel>
                       <FormControl>
-                        <Input value={value ?? ""} placeholder="Guinea pig" {...rest} />
+                        <Input value={value ?? ""} placeholder="Guinea pig" {...rest}/>
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -214,10 +245,11 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
                         {/* Using shadcn/ui form with number: https://github.com/shadcn-ui/ui/issues/421 */}
                         <Input
                           type="number"
-                          value={value ?? ""}
+                          value={field.value ?? ""}
                           placeholder="300000"
                           {...rest}
-                          onChange={(event) => field.onChange(+event.target.value)}
+                          // onChange={(event) => field.onChange(+event.target.value)}
+                          onChange={(e) => field.onChange(e.target.value === "" ? null : +e.target.value)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -269,13 +301,16 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
               />
               <div className="flex">
                 <Button type="submit" className="ml-1 mr-1 flex-auto">
-                  Add Species
+                  Finish Editing
                 </Button>
                 <DialogClose asChild>
-                  <Button type="button" className="ml-1 mr-1 flex-auto" variant="secondary">
+                  <Button type="button" className="ml-1 mr-1 flex-auto" variant="secondary" onClick={handleDialogClose}>
                     Cancel
                   </Button>
                 </DialogClose>
+                <Button onClick = {() => deleteSpecies()}type="button" className="ml-1 mr-1 flex-auto" style = {{backgroundColor: 'red'}}>
+                  Delete Species
+                </Button>
               </div>
             </div>
           </form>
@@ -284,3 +319,4 @@ export default function AddSpeciesDialog({ userId }: { userId: string }) {
     </Dialog>
   );
 }
+
