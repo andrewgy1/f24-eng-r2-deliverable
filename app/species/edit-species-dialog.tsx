@@ -23,8 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { createBrowserSupabaseClient } from "@/lib/client-utils";
 import type { Database } from "@/lib/schema";
-import {UUID } from "crypto";
-import Image from "next/image";
 import { useState } from "react";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -81,16 +79,16 @@ Otherwise, they will be `undefined` by default, which will raise warnings becaus
 All form fields should be set to non-undefined default values.
 Read more here: https://legacy.react-hook-form.com/api/useform/
 */
-const defaultValues: Partial<FormData> = {
-  scientific_name: "",
-  common_name: null,
-  kingdom: "Animalia",
-  total_population: null,
-  image: null,
-  description: null,
-};
+// const defaultValues: Partial<FormData> = {
+//   scientific_name: "",
+//   common_name: null,
+//   kingdom: "Animalia",
+//   total_population: null,
+//   image: null,
+//   description: null,
+// };
 
-export default function EditSpeciesDialog ({ species, currentId }: { species: Species, currentId: string }){
+export default function EditSpeciesDialog ({ species }: { species: Species, currentId: string }){
   const router = useRouter();
   const [open, setOpen] = useState<boolean>(false);
   // Instantiate form functionality with React Hook Form, passing in the Zod schema (for validation) and default values
@@ -111,7 +109,7 @@ export default function EditSpeciesDialog ({ species, currentId }: { species: Sp
   const onSubmit = async (input: FormData) => {
     // The `input` prop contains data that has already been processed by zod. We can now use it in a supabase query
     const supabase = createBrowserSupabaseClient();
-    const {data, error } = await supabase.from("species").update(input)
+    const {error } = await supabase.from("species").update(input)
       .eq("id", species.id);
 
     // Catch and report errors from Supabase and exit the onSubmit function with an early 'return' if an error occurred.
@@ -147,9 +145,9 @@ export default function EditSpeciesDialog ({ species, currentId }: { species: Sp
   };
 
   //Deletes post when delete button is clicked
-  const deleteSpecies = async ()=>{
+  const deleteSpecies = async () =>{
     const supabase = createBrowserSupabaseClient();
-    const {data, error } = await supabase.from("species").delete().match({"id": species.id});
+    await supabase.from("species").delete().match({"id": species.id});
 
     setOpen(false);
     router.refresh();
@@ -238,7 +236,7 @@ export default function EditSpeciesDialog ({ species, currentId }: { species: Sp
                 control={form.control}
                 name="total_population"
                 render={({ field }) => {
-                  const { value, ...rest } = field;
+                  const { value, ...rest} = field;
                   return (
                     <FormItem>
                       <FormLabel>Total population</FormLabel>
@@ -246,11 +244,10 @@ export default function EditSpeciesDialog ({ species, currentId }: { species: Sp
                         {/* Using shadcn/ui form with number: https://github.com/shadcn-ui/ui/issues/421 */}
                         <Input
                           type="number"
-                          value={field.value ?? ""}
+                          value={value ?? ""}
                           placeholder="300000"
                           {...rest}
-                          // onChange={(event) => field.onChange(+event.target.value)}
-                          onChange={(e) => field.onChange(e.target.value === "" ? null : +e.target.value)}
+                          onChange={(event) => field.onChange(+event.target.value)}
                         />
                       </FormControl>
                       <FormMessage />
@@ -309,7 +306,12 @@ export default function EditSpeciesDialog ({ species, currentId }: { species: Sp
                     Cancel
                   </Button>
                 </DialogClose>
-                <Button onClick = {() => deleteSpecies()}type="button" className="ml-1 mr-1 flex-auto" style = {{backgroundColor: 'red'}}>
+                <Button
+                type="button"
+                className="ml-1 mr-1 flex-auto"
+                style={{ backgroundColor: 'red' }}
+                onClick={() => {void deleteSpecies();}}
+                >
                   Delete Species
                 </Button>
               </div>

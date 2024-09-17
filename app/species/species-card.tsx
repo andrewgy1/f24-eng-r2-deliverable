@@ -20,7 +20,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createBrowserSupabaseClient } from "@/lib/client-utils";
 import type { Database } from "@/lib/schema";
 import Image from "next/image";
 import { useState } from "react";
@@ -69,4 +68,3 @@ export default function SpeciesCard({ species, currentUser, authorName }: {speci
     </div>
   );
 }
-// Button onClick={handleEditClick}>Edit Post</Button
