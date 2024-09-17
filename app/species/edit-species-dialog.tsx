@@ -34,6 +34,7 @@ import { toast } from "@/components/ui/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { type BaseSyntheticEvent } from "react";
 import { z } from "zod";
 
 type Species = Database["public"]["Tables"]["species"]["Row"];
